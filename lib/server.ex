@@ -1,10 +1,7 @@
 defmodule TTT.Server do
   @initial_state {
     List.duplicate(nil, 9),
-    # p1
-    nil,
-    # p2
-    nil,
+    [nil, nil],
     # current
     nil
   }
@@ -41,11 +38,11 @@ defmodule TTT.Server do
     |> loop()
   end
 
-  defp handle_register(caller, {board, nil, nil, nil}), do: {board, caller, nil, nil}
+  defp handle_register(caller, {board, [nil, nil], nil}), do: {board, [caller, nil], nil}
 
-  defp handle_register(caller, {board, p1, nil, nil}) do
+  defp handle_register(caller, {board, [p1, nil], nil}) do
     send(p1, {:your_turn, board})
-    {board, p1, caller, p1}
+    {board, [p1, caller], p1}
   end
 
   defp handle_register(caller, state) do
@@ -53,7 +50,7 @@ defmodule TTT.Server do
     state
   end
 
-  defp handle_play(caller, position, {board, p1, p2, caller} = state) do
+  defp handle_play(caller, position, {board, [p1, p2], caller} = state) do
     with {:ok, current, next, symbol} <- validate_player(caller, p1, p2),
          {:ok, new_board} <- Logic.update_board(board, position, symbol) do
       send(current, {:accepted, new_board})
@@ -62,7 +59,7 @@ defmodule TTT.Server do
         notify_and_reset_game([p1, p2], new_board)
       else
         send(next, {:your_turn, new_board})
-        {new_board, p1, p2, next}
+        {new_board, [p1, p2], next}
       end
     else
       {:error, error} ->
