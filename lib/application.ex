@@ -1,6 +1,8 @@
 defmodule TTT.Application do
+  use Application
+
   def start(_, _) do
-    server_pid = TTT.Server.start()
-    TTT.Client.start(server_pid, 6000)
+    TTT.Server.start_link(name: TTT.Server)
+    TTT.Client.start(6000)
   end
 end

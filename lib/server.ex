@@ -1,4 +1,6 @@
 defmodule TTT.Server do
+  use GenServer
+
   @initial_state {
     List.duplicate(nil, 9),
     [nil, nil],
@@ -22,55 +24,68 @@ defmodule TTT.Server do
 
   alias TTT.Logic
 
-  def start do
-    spawn(fn -> loop() end)
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, nil, opts)
   end
 
-  defp loop(state \\ @initial_state) do
-    receive do
-      {caller, {:play, position}} ->
-        handle_play(caller, position, state)
-
-      {caller, :register} ->
-        handle_register(caller, state)
-    end
-    |> IO.inspect()
-    |> loop()
+  @impl true
+  def init(_) do
+    {:ok, @initial_state}
   end
 
-  defp handle_register(caller, {board, [nil, nil], nil}), do: {board, [caller, nil], nil}
+  def register(pid \\ __MODULE__, player_pid) do
+    GenServer.call(pid, {:register, player_pid})
+  end
 
-  defp handle_register(caller, {board, [p1, nil], nil}) do
+  def play(pid \\ __MODULE__, position) do
+    GenServer.call(pid, {:play, position})
+  end
+
+  @impl true
+  def handle_call({:register, player_pid}, _from, {board, [nil, nil], nil}) do
+    next_state = {board, [player_pid, nil], nil}
+    {:reply, next_state, next_state}
+  end
+
+  @impl true
+  def handle_call({:register, player_pid}, _from, {board, [p1, nil], nil}) do
     send(p1, {:your_turn, board})
-    {board, [p1, caller], p1}
+    next_state = {board, [p1, player_pid], p1}
+    {:reply, next_state, next_state}
   end
 
-  defp handle_register(caller, state) do
+  @impl true
+  def handle_call({:register, _}, {caller, _}, state) do
     send(caller, {:error, :game_full})
-    state
+    {:reply, state, state}
   end
 
-  defp handle_play(caller, position, {board, [p1, p2], caller} = state) do
-    with {:ok, current, next, symbol} <- validate_player(caller, p1, p2),
-         {:ok, new_board} <- Logic.update_board(board, position, symbol) do
-      send(current, {:accepted, new_board})
+  @impl true
+  def handle_call({:play, position}, {caller, _}, {board, [p1, p2], caller} = state) do
+    next_state =
+      with {:ok, current, next, symbol} <- validate_player(caller, p1, p2),
+           {:ok, new_board} <- Logic.update_board(board, position, symbol) do
+        send(current, {:accepted, new_board})
 
-      if Logic.board_full?(new_board) || Logic.has_winner?(new_board, @win_patterns) do
-        notify_and_reset_game([p1, p2], new_board)
+        if Logic.board_full?(new_board) || Logic.has_winner?(new_board, @win_patterns) do
+          notify_and_reset_game([p1, p2], new_board)
+        else
+          send(next, {:your_turn, new_board})
+          {new_board, [p1, p2], next}
+        end
       else
-        send(next, {:your_turn, new_board})
-        {new_board, [p1, p2], next}
+        {:error, error} ->
+          send(caller, {:error, error})
+          state
       end
-    else
-      {:error, error} ->
-        send(caller, {:error, error})
-        state
-    end
+
+    {:reply, next_state, next_state}
   end
 
-  defp handle_play(caller, _, state) do
+  @impl true
+  def handle_call({:play, _}, {caller, _}, state) do
     send(caller, {:error, :not_your_turn})
-    state
+    {:reply, state, state}
   end
 
   defp validate_player(caller, caller, p2), do: {:ok, caller, p2, @p1_symbol}

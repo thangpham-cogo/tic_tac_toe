@@ -1,40 +1,40 @@
 defmodule TTT.Client do
-  def start(server_pid, port) do
+  def start(port) do
     {:ok, socket} =
       :gen_tcp.listen(port, [:binary, packet: :line, active: false, reuseaddr: true])
 
-    loop_acceptor(server_pid, socket)
+    loop_acceptor(socket)
   end
 
-  def loop_acceptor(server_pid, socket) do
+  def loop_acceptor(socket) do
     {:ok, client} = :gen_tcp.accept(socket)
-    spawn(fn -> register(server_pid, client) end)
-    loop_acceptor(server_pid, socket)
+    spawn(fn -> register(client) end)
+    loop_acceptor(socket)
   end
 
-  def register(server_pid, socket) do
-    send(server_pid, {self(), :register})
+  def register(socket) do
+    TTT.Server.register(self())
 
     puts("Waiting for other player...", socket)
 
     receive do
-      {:your_turn, board} -> play(server_pid, board, socket)
+      {:your_turn, board} -> play(board, socket)
       {:error, :game_full} -> puts("Game is full :(", socket)
     end
 
     :gen_tcp.close(socket)
   end
 
-  defp play(server_pid, board, socket) do
+  defp play(board, socket) do
     print_board(board, socket)
 
     position = ask_for_position(socket)
-    send(server_pid, {self(), {:play, position - 1}})
+    TTT.Server.play(position - 1)
 
     receive do
       {:error, error} ->
         print_error(error, socket)
-        play(server_pid, board, socket)
+        play(board, socket)
 
       {:accepted, board} ->
         print_board(board, socket)
@@ -43,7 +43,7 @@ defmodule TTT.Client do
 
         receive do
           {:your_turn, board} ->
-            play(server_pid, board, socket)
+            play(board, socket)
 
           {:game_complete, board} ->
             print_board(board, socket)
