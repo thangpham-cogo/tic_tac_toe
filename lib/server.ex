@@ -25,7 +25,8 @@ defmodule TTT.Server do
   alias TTT.Logic
 
   def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, nil, opts)
+    name = Keyword.get(opts, :name, __MODULE__)
+    GenServer.start_link(__MODULE__, nil, name: name)
   end
 
   @impl true
@@ -55,9 +56,8 @@ defmodule TTT.Server do
   end
 
   @impl true
-  def handle_call({:register, _}, {caller, _}, state) do
-    send(caller, {:error, :game_full})
-    {:reply, state, state}
+  def handle_call({:register, _}, _from, state) do
+    {:reply, {:error, :game_full}, state}
   end
 
   @impl true
@@ -83,9 +83,8 @@ defmodule TTT.Server do
   end
 
   @impl true
-  def handle_call({:play, _}, {caller, _}, state) do
-    send(caller, {:error, :not_your_turn})
-    {:reply, state, state}
+  def handle_call({:play, _}, _, state) do
+    {:reply, {:error, :not_your_turn}, state}
   end
 
   defp validate_player(caller, caller, p2), do: {:ok, caller, p2, @p1_symbol}

@@ -1,5 +1,13 @@
 defmodule TTT.Client do
-  def start(port) do
+  use Task, restart: :temporary
+
+  @port 6000
+
+  def start_link(_opts) do
+    Task.start_link(__MODULE__, :start, [])
+  end
+
+  def start(port \\ @port) do
     {:ok, socket} =
       :gen_tcp.listen(port, [:binary, packet: :line, active: false, reuseaddr: true])
 
