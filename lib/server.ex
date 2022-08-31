@@ -8,6 +8,7 @@ defmodule TTT.Server do
     # current
     nil
   }
+
   @win_patterns [
     [0, 1, 2],
     [3, 4, 5],
@@ -22,13 +23,13 @@ defmodule TTT.Server do
   @p1_symbol 0
   @p2_symbol 1
 
+  alias TTT.Logic
+
   def start do
     spawn(fn -> loop() end)
   end
 
   defp loop(state \\ @initial_state) do
-    IO.inspect(state)
-
     receive do
       {caller, {:play, position}} ->
         handle_play(caller, position, state)
@@ -36,6 +37,7 @@ defmodule TTT.Server do
       {caller, :register} ->
         handle_register(caller, state)
     end
+    |> IO.inspect()
     |> loop()
   end
 
@@ -53,10 +55,10 @@ defmodule TTT.Server do
 
   defp handle_play(caller, position, {board, p1, p2, caller} = state) do
     with {:ok, current, next, symbol} <- validate_player(caller, p1, p2),
-         {:ok, new_board} <- update_board(board, position, symbol) do
+         {:ok, new_board} <- Logic.update_board(board, position, symbol) do
       send(current, {:accepted, new_board})
 
-      if game_ends?(new_board) do
+      if Logic.board_full?(new_board) || Logic.has_winner?(new_board, @win_patterns) do
         notify_and_reset_game([p1, p2], new_board)
       else
         send(next, {:your_turn, new_board})
@@ -79,47 +81,10 @@ defmodule TTT.Server do
   # crash the game
   defp validate_player(_caller, _p1, _p2), do: {:error, :unknown_current_player}
 
-  defp update_board(_, position, _) when position < 0, do: {:error, :invalid_position}
-
-  defp update_board(board, position, symbol) do
-    case Enum.fetch(board, position) do
-      {:ok, nil} ->
-        new_board = List.replace_at(board, position, symbol)
-        {:ok, new_board}
-
-      {:ok, _} ->
-        {:error, :cell_not_empty}
-
-      _ ->
-        {:error, :invalid_position}
-    end
-  end
-
   defp notify_and_reset_game(players, board) do
+    IO.puts("game done")
     Enum.each(players, &send(&1, {:game_complete, board}))
 
     @initial_state
-  end
-
-  defp game_ends?(board) do
-    has_winner?(board) || board_full?(board)
-  end
-
-  defp has_winner?(board) do
-    @win_patterns
-    |> List.flatten()
-    |> Enum.map(&Enum.at(board, &1))
-    |> Enum.chunk_every(3)
-    |> Enum.any?(fn line ->
-      case line do
-        [@p1_symbol, @p1_symbol, @p1_symbol] -> true
-        [@p2_symbol, @p2_symbol, @p2_symbol] -> true
-        _ -> false
-      end
-    end)
-  end
-
-  defp board_full?(board) do
-    Enum.all?(board, &(not is_nil(&1)))
   end
 end
